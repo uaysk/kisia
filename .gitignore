@@ -11,23 +11,11 @@ Debug/
 Release/
 x64/
 x86/
-[Bb]uild/
 
 # Logs
 [Ll]ogs/
 *.log
 
-# Temp/cache
-*.tmp
-*.cache
-*.pdb
-
-# Test results
-[Tt]est[Rr]esults/
-*.coverage
-*.coveragexml
-
 # Development settings
 appsettings.Development.json
-appsettings.json
 launchSettings.json
