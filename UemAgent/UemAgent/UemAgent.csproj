@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+	<UseWindowsService>true</UseWindowsService>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-UemAgent-fcca5bcb-edb7-44ef-bc3c-e23e1b6d89e1</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+	  <!-- 서비스 호스팅 확장 -->
+	  <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+	  <!-- WMI 사용 (OS 정보 수집용) -->
+      <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Services\" />
+    <Folder Include="Workers\" />
+  </ItemGroup>
+</Project>
