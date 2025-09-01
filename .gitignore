@@ -29,3 +29,5 @@ x86/
 
 # Development settings
 appsettings.Development.json
+appsettings.json
+launchSettings.json
