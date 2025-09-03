@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      # 로컬 PC의 8080 포트를 Nginx 컨테이너의 80 포트와 연결
+      - "8080:80"
+    volumes:
+      # 작성한 nginx 설정을 컨테이너에 복사
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - fastapi_app
+    networks:
+      - app-network
+
+  fastapi_app:
+    # app 폴더의 Dockerfile을 사용하여 이미지 빌드
+    build: ./app
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

@@ -19,3 +19,5 @@ x86/
 appsettings.Development.json
 launchSettings.json
 .env
+venv
+.venv
