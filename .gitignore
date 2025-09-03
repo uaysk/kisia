@@ -1,1 +1,21 @@
+.vs/
+*.user
+*.suo
+*.dbmdl
+
+# Build outputs
+bin/
+obj/
+Debug/
+Release/
+x64/
+x86/
+
+# Logs
+[Ll]ogs/
+*.log
+
+# Development settings
+appsettings.Development.json
+launchSettings.json
 .env
