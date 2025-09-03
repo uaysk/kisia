@@ -1,38 +1,57 @@
-from fastapi import FastAPI, Request, HTTPException, Response
+# app/main.py
 
-# 개념 증명을 위해 파이썬 메모리에 허용된 IP 목록을 저장합니다.
-# 실제 프로덕션 환경에서는 Redis나 데이터베이스를 사용해야 합니다.
+from fastapi import FastAPI, Request, HTTPException, Response
+import logging
+
+# 디버깅을 위한 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# 허용된 IP 목록 (메모리에 저장, 실제 환경에서는 Redis 등 사용)
 ALLOWED_IPS = set()
 
 app = FastAPI()
 
+def get_client_ip(request: Request) -> str | None:
+    """
+    Nginx 프록시가 설정한 'x-real-ip' 헤더에서 클라이언트 IP를 일관되게 가져옵니다.
+    """
+    client_ip = request.headers.get("x-real-ip")
+    # Docker Compose 환경에서는 curl 요청의 소스 IP가 Docker 네트워크 내부 IP로 보일 수 있습니다.
+    # 예: 172.18.0.1
+    # 이 IP를 기준으로 허용/차단하게 됩니다.
+    return client_ip
+
 @app.get("/getaccess")
 def get_access(request: Request):
     """
-    요청을 보낸 클라이언트의 IP를 허용 목록에 추가합니다.
+    'x-real-ip' 헤더를 기반으로 클라이언트 IP를 허용 목록에 추가합니다.
     """
-    client_ip = request.client.host
+    client_ip = get_client_ip(request)
+    logger.info(f"--- /getaccess 요청 수신 ---")
+    logger.info(f"전체 헤더: {dict(request.headers)}")
+    
     if client_ip:
         ALLOWED_IPS.add(client_ip)
-        print(f"✅ IP {client_ip} has been added to the allow list. Current list: {ALLOWED_IPS}")
-        return {"message": f"IP {client_ip} is now allowed."}
-    return {"message": "Could not determine client IP."}
+        logger.info(f"✅ IP {client_ip}를 허용 목록에 추가했습니다. 현재 목록: {ALLOWED_IPS}")
+        return {"message": f"IP {client_ip}의 접근이 허용되었습니다."}
+    
+    logger.error("🚫 'x-real-ip' 헤더를 찾을 수 없습니다. Nginx 설정을 확인하세요.")
+    raise HTTPException(status_code=400, detail="'x-real-ip' header is missing.")
 
 
 @app.get("/auth")
 def authenticate_request(request: Request):
     """
-    Nginx의 auth_request에 의해 호출되는 인증 엔드포인트입니다.
-    X-Real-IP 헤더를 통해 실제 클라이언트 IP를 확인합니다.
+    Nginx의 auth_request에 의해 호출되며, 'x-real-ip' 헤더의 IP가 허용 목록에 있는지 확인합니다.
     """
-    # Nginx가 proxy_set_header를 통해 전달한 실제 클라이언트 IP
-    client_ip = request.headers.get("x-real-ip")
+    client_ip = get_client_ip(request)
+    logger.info(f"--- /auth 인증 요청 수신 ---")
+    logger.info(f"인증 시도 IP: {client_ip}")
 
-    if client_ip in ALLOWED_IPS:
-        print(f"👍 Access granted for IP: {client_ip}")
-        # IP가 허용 목록에 있으면 200 OK 응답
+    if client_ip and client_ip in ALLOWED_IPS:
+        logger.info(f"👍 접근 허용: {client_ip}")
         return Response(status_code=200)
     else:
-        print(f"🚫 Access denied for IP: {client_ip}")
-        # 허용 목록에 없으면 403 Forbidden 예외 발생
+        logger.warning(f"🚫 접근 거부: {client_ip}. (허용 목록: {ALLOWED_IPS})")
         raise HTTPException(status_code=403, detail="Access Denied")
