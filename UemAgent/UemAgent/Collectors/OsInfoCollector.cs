@@ -24,9 +24,8 @@ namespace UemAgent.Collectors
             return s;
         }
 
-        /// <summary>
+       
         /// Win32_OperatingSystem에서 OS 기본 정보 가져오기
-        /// </summary>
         private static void TryFillOsFromWmi(OsSnapshot s)
         {
             try
@@ -48,7 +47,7 @@ namespace UemAgent.Collectors
         }
 
         
-        /// 레지스트리에서 DisplayVersion, InstallDate 보완
+        /// 레지스트리 DisplayVersion, InstallDate
         
         private static void TryFillDisplayAndInstallFromRegistry(OsSnapshot s)
         {
@@ -78,7 +77,6 @@ namespace UemAgent.Collectors
         }
 
         /// 업타임 계산
-        
         private static void TryFillBootAndUptime(OsSnapshot s)
         {
             try

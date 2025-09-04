@@ -19,5 +19,9 @@ namespace UemAgent.Models
         // Meta
         public string TimezoneId { get; set; } = TimeZoneInfo.Local.Id;
         public DateTime CollectedAtUtc { get; set; } = DateTime.UtcNow;
+
+        public VmSignals? Vm { get; set; }
+        
+        public AvSignals? Av { get; set; }
     }
 }
