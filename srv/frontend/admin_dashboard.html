@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 2rem; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { border-bottom: 1px solid #dee2e6; padding-bottom: 1rem; margin-top: 2rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
+        .card { border: 1px solid #dee2e6; border-radius: 4px; padding: 1.5rem; }
+        .card h3 { margin-top: 0; }
+        ul { list-style: none; padding: 0; }
+        li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
+        li:last-child { border-bottom: none; }
+        .delete-btn { background: #dc3545; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; }
+        input { width: 95%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+        .submit-btn { background-color: #007bff; color: white; border: none; padding: 0.75rem; border-radius: 4px; cursor: pointer; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Admin Dashboard</h1>
+
+        <!-- Services Section -->
+        <section id="services">
+            <h2>Services</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Existing Services</h3>
+                    <ul id="service-list"></ul>
+                </div>
+                <div class="card">
+                    <h3>Add New Service</h3>
+                    <form id="add-service-form">
+                        <div class="form-group">
+                            <label for="service-name">Name</label>
+                            <input type="text" id="service-name" name="name" required placeholder="e.g., my-wiki">
+                        </div>
+                        <div class="form-group">
+                            <label for="service-upstream">Upstream URL</label>
+                            <input type="text" id="service-upstream" name="upstream_url" required placeholder="e.g., http://172.17.0.1:8080">
+                        </div>
+                        <div class="form-group">
+                            <label for="service-path">Access Path</label>
+                            <input type="text" id="service-path" name="access_path" required placeholder="e.g., /wiki/">
+                        </div>
+                        <div class="form-group">
+                            <label for="service-score">Required Score</label>
+                            <input type="number" id="service-score" name="required_score" required value="80">
+                        </div>
+                        <button type="submit" class="submit-btn">Add Service</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- Users Section -->
+        <section id="users">
+            <h2>Users</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Existing Users</h3>
+                    <ul id="user-list"></ul>
+                </div>
+                <div class="card">
+                    <h3>Add New User</h3>
+                    <form id="add-user-form">
+                        <div class="form-group">
+                            <label for="user-username">Username</label>
+                            <input type="text" id="user-username" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="user-password">Password</label>
+                            <input type="password" id="user-password" name="password" required>
+                        </div>
+                        <button type="submit" class="submit-btn">Add User</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- Admins Section -->
+        <section id="admins">
+            <h2>Admins</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Existing Admins</h3>
+                    <ul id="admin-list"></ul>
+                </div>
+                <div class="card">
+                    <h3>Add New Admin</h3>
+                    <form id="add-admin-form">
+                        <div class="form-group">
+                            <label for="admin-username">Username</label>
+                            <input type="text" id="admin-username" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="admin-password">Password</label>
+                            <input type="password" id="admin-password" name="password" required>
+                        </div>
+                        <button type="submit" class="submit-btn">Add Admin</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const API_BASE = '/admin';
+
+        // Generic function to fetch and render lists
+        async function renderList(endpoint, listId, itemRenderer) {
+            const listElement = document.getElementById(listId);
+            try {
+                const response = await fetch(`${API_BASE}/${endpoint}`, { cache: 'no-cache' });
+                if (!response.ok) {
+                    if(response.status === 401) window.location.href = '/admin_login.html';
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const items = await response.json();
+                listElement.innerHTML = ''; // Clear list
+                if (items.length === 0) listElement.innerHTML = '<li>None found.</li>';
+                items.forEach(item => listElement.appendChild(itemRenderer(item)));
+            } catch (e) {
+                listElement.innerHTML = `<li>Error loading data: ${e.message}</li>`;
+            }
+        }
+
+        // Generic function to handle item deletion
+        async function deleteItem(endpoint, id, callback) {
+            if (!confirm('Are you sure you want to delete this item?')) return;
+            try {
+                const response = await fetch(`${API_BASE}/${endpoint}/${id}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('Failed to delete');
+                callback(); // Refresh the list
+            } catch (e) {
+                alert(`Error: ${e.message}`);
+            }
+        }
+
+        // Generic function to handle item creation
+        async function createItem(endpoint, formId, callback) {
+            const form = document.getElementById(formId);
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(form);
+                const data = Object.fromEntries(formData.entries());
+                
+                // Convert score to number if it exists
+                if(data.required_score) data.required_score = parseInt(data.required_score, 10);
+
+                try {
+                    const response = await fetch(`${API_BASE}/${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    if (!response.ok) {
+                        const err = await response.json();
+                        throw new Error(err.detail || 'Failed to create item');
+                    }
+                    form.reset();
+                    callback(); // Refresh list
+                } catch (e) {
+                    alert(`Error: ${e.message}`);
+                }
+            });
+        }
+
+        // --- Item-specific renderers ---
+        const createUserListItem = (user) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>${user.username} (ID: ${user.id})</span> <button class="delete-btn" data-id="${user.id}">Delete</button>`;
+            li.querySelector('.delete-btn').onclick = () => deleteItem('users', user.id, loadAllData);
+            return li;
+        };
+
+        const createAdminListItem = (admin) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>${admin.username} (ID: ${admin.id})</span> <button class="delete-btn" data-id="${admin.id}">Delete</button>`;
+            li.querySelector('.delete-btn').onclick = () => deleteItem('admins', admin.id, loadAllData);
+            return li;
+        };
+
+        const createServiceListItem = (service) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span><b>${service.name}</b> (${service.access_path}) -> ${service.upstream_url} [Score: ${service.required_score}]</span> <button class="delete-btn" data-id="${service.id}">Delete</button>`;
+            li.querySelector('.delete-btn').onclick = () => deleteItem('services', service.id, loadAllData);
+            return li;
+        };
+
+        // --- Load all data on page load ---
+        function loadAllData() {
+            renderList('users', 'user-list', createUserListItem);
+            renderList('admins', 'admin-list', createAdminListItem);
+            renderList('services', 'service-list', createServiceListItem);
+        }
+
+        window.onload = () => {
+            loadAllData();
+            createItem('users', 'add-user-form', loadAllData);
+            createItem('admins', 'add-admin-form', loadAllData);
+            createItem('services', 'add-service-form', loadAllData);
+        };
+    </script>
+</body>
+</html>

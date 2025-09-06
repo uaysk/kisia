@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Dashboard</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f8f9fa; margin: 0; padding: 2rem; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { border-bottom: 1px solid #dee2e6; padding-bottom: 1rem; }
+        #service-list { list-style: none; padding: 0; }
+        #service-list li { margin: 1rem 0; }
+        #service-list a { text-decoration: none; color: #007bff; font-size: 1.2rem; }
+        #service-list a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Available Services</h1>
+        <ul id="service-list"></ul>
+    </div>
+
+    <script>
+        async function loadServices() {
+            const serviceList = document.getElementById('service-list');
+            try {
+                const response = await fetch('/api/services');
+                if (!response.ok) throw new Error('Failed to load services');
+                
+                const services = await response.json();
+                
+                if (services.length === 0) {
+                    serviceList.innerHTML = '<li>No services available.</li>';
+                    return;
+                }
+
+                services.forEach(service => {
+                    const listItem = document.createElement('li');
+                    const link = document.createElement('a');
+                    link.href = service.access_path;
+                    link.textContent = service.name;
+                    link.target = "_blank"; // Open in new tab
+                    listItem.appendChild(link);
+                    serviceList.appendChild(listItem);
+                });
+            } catch (error) {
+                serviceList.innerHTML = `<li>Error: ${error.message}</li>`;
+            }
+        }
+
+        window.onload = loadServices;
+    </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.5
+    container_name: ztna-poc-db-1
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ztna_db
+      MYSQL_USER: ztna_user
+      MYSQL_PASSWORD: ztnapassword
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - ztna-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dummy-uem:
+    build: ./dummy-uem
+    container_name: ztna-poc-dummy-uem-1
+    ports:
+      - "8000:8000"
+    networks:
+      - ztna-net
+
+  backend:
+    build: ./backend
+    container_name: ztna-poc-backend-1
+    volumes:
+      - ./nginx/conf.d:/nginx_conf_d # Nginx 설정 파일을 생성/삭제하기 위한 볼륨
+      - /var/run/docker.sock:/var/run/docker.sock # Nginx reload를 위한 Docker 소켓 마운트
+    environment:
+      DATABASE_URL: "mysql+pymysql://ztna_user:ztnapassword@db:3306/ztna_db"
+      UEM_URL: "http://dummy-uem:8000"
+      NGINX_CONTAINER_NAME: "ztna-poc-nginx-1"
+      NGINX_CONF_PATH: "/nginx_conf_d"
+    depends_on:
+      db:
+        condition: service_healthy
+      dummy-uem:
+        condition: service_started
+    networks:
+      - ztna-net
+
+  nginx:
+    build: ./nginx
+    container_name: ztna-poc-nginx-1
+    ports:
+      - "83:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - backend
+    networks:
+      - ztna-net
+
+volumes:
+  db_data:
+
+networks:
+  ztna-net:
+    driver: bridge
