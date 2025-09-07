@@ -8,7 +8,7 @@ using UemAgent.Models;
 
 namespace UemAgent.Collectors
 {
-    public static class VmDetector
+    public sealed class VmDetector : ICollector<VmSignals>
     {
         private static readonly string[] VmwareOui = { "00:05:69", "00:0C:29", "00:50:56" };
         private static readonly string[] VBoxOui = { "08:00:27" };
@@ -17,7 +17,8 @@ namespace UemAgent.Collectors
         private static readonly string[] QemuOui = { "52:54:00" };
         private static readonly string[] XenOui = { "00:16:3E" };
 
-        public static VmSignals Detect()
+        public string Name => "vm";
+        public VmSignals Collect()
         {
             var sig = new VmSignals
             {

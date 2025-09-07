@@ -4,10 +4,12 @@ using System.Management;
 using Microsoft.Win32;
 using UemAgent.Models;
 
+
 namespace UemAgent.Collectors
 {
-    public sealed class OsInfoCollector
+    public sealed class OsInfoCollector : ICollector<OsSnapshot>
     {
+        public string Name => "os";
         public OsSnapshot Collect()
         {
             var s = new OsSnapshot

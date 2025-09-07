@@ -8,9 +8,10 @@ using UemAgent.Models;
 
 namespace UemAgent.Collectors
 {
-    public static class AvDetector
+    public sealed class AvDetector : ICollector<AvSignals>
     {
-        public static AvSignals Detect()
+        public string Name => "av";
+        public AvSignals Collect()
         {
             var sig = new AvSignals
             {
@@ -36,7 +37,6 @@ namespace UemAgent.Collectors
             // 실행 여부 추정 (프로세스, 서비스 이름 기반)
             var procNames = GetProcessNameSet();
             var svcNames = GetRunningServiceNameSet();
-
 
             foreach (var p in products)
             {
@@ -127,7 +127,6 @@ namespace UemAgent.Collectors
                 _ => (Array.Empty<string>(), Array.Empty<string>())
             };
 
-
         private static HashSet<string> GetProcessNameSet()
         {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -174,9 +173,5 @@ namespace UemAgent.Collectors
 
             return set;
         }
-
-
-
-
     }
 }

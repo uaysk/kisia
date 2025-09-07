@@ -9,12 +9,14 @@ class Program
     {
         var collector = new OsInfoCollector();
         var snap = collector.Collect();
+        var vmDector = new VmDetector();
+        var avDector = new AvDetector();
 
         //Virtual machine 신호 수집
-        snap.Vm = VmDetector.Detect();
+        snap.Vm = vmDector.Collect();
 
         //보안 프로그램 신호 수집
-        snap.Av = AvDetector.Detect();
+        snap.Av = avDector.Collect();
 
         if(snap.Av?.Products != null)
         {
