@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from . import crud, models, auth, dependencies
+from . import ws    
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 models.Base.metadata.create_all(bind=models.engine)
 
 app = FastAPI()
+
+app.include_router(ws.router)
 
 # CORS Middleware Configuration
 origins = ["*"] # Allow all origins for this PoC
@@ -28,7 +31,7 @@ app.add_middleware(
 
 UEM_URL = os.environ.get("UEM_URL")
 NGINX_CONTAINER_NAME = os.environ.get("NGINX_CONTAINER_NAME")
-NGINX_CONF_PATH = os.environ.get("NGINX_CONF_PATH")
+NGINX_CONF_PATH = os.environ.get("NGINX_CONF_PATH") 
 
 # Helper function to reload Nginx
 def reload_nginx():
