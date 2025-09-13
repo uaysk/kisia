@@ -22,4 +22,4 @@ launchSettings.json
 venv
 .venv
 
-#nginx/conf.d/
+srv/nginx/conf.d/
