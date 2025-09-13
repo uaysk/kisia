@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Dashboard</title>
     <style>
-        body { font-family: sans-serif; background-color: #f8f9fa; margin: 0; padding: 2rem; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        body { font-family: sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+        .navbar { background-color: #343a40; padding: 1rem 2rem; color: white; display: flex; justify-content: space-between; align-items: center; }
+        .navbar a { color: white; text-decoration: none; }
+        .navbar #username { font-weight: bold; }
+        .navbar button { background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+        .container { max-width: 800px; margin: 2rem auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h1 { border-bottom: 1px solid #dee2e6; padding-bottom: 1rem; }
         #service-list { list-style: none; padding: 0; }
         #service-list li { margin: 1rem 0; }
@@ -15,16 +19,55 @@
     </style>
 </head>
 <body>
+    <div class="navbar">
+        <a href="#"><h2>ZTNA Portal</h2></a>
+        <div>
+            <span id="username"></span>
+            <button id="logout-button">Logout</button>
+        </div>
+    </div>
+
     <div class="container">
         <h1>Available Services</h1>
         <ul id="service-list"></ul>
     </div>
 
     <script>
+        const token = localStorage.getItem('accessToken');
+
+        async function fetchWithAuth(url, options = {}) {
+            const headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${token}`
+            };
+            const response = await fetch(url, { ...options, headers });
+
+            if (response.status === 401) {
+                // Token is invalid or expired, redirect to login
+                localStorage.removeItem('accessToken');
+                window.location.href = '/user_login.html';
+                throw new Error('Unauthorized'); // Stop further execution
+            }
+            return response;
+        }
+
+        async function loadUserInfo() {
+            const usernameSpan = document.getElementById('username');
+            try {
+                const response = await fetchWithAuth('/api/users/me');
+                if (!response.ok) throw new Error('Failed to load user info');
+                const user = await response.json();
+                usernameSpan.textContent = `Welcome, ${user.username}`;
+            } catch (error) {
+                console.error("Error loading user info:", error);
+                usernameSpan.textContent = 'Could not load user data.';
+            }
+        }
+
         async function loadServices() {
             const serviceList = document.getElementById('service-list');
             try {
-                const response = await fetch('/api/services');
+                const response = await fetchWithAuth('/api/services');
                 if (!response.ok) throw new Error('Failed to load services');
                 
                 const services = await response.json();
@@ -48,7 +91,18 @@
             }
         }
 
-        window.onload = loadServices;
+        document.getElementById('logout-button').addEventListener('click', () => {
+            localStorage.removeItem('accessToken');
+            window.location.href = '/user_login.html';
+        });
+
+        // On page load, check for token and load data
+        if (!token) {
+            window.location.href = '/user_login.html';
+        } else {
+            loadUserInfo();
+            loadServices();
+        }
     </script>
 </body>
 </html>

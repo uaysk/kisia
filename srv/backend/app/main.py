@@ -1,12 +1,14 @@
 import os
 import httpx
 import docker
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Response, Form
+from fastapi import FastAPI, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from typing import List
+from fastapi.security import OAuth2PasswordRequestForm
+from datetime import timedelta
 
-from . import crud, models, auth, dependencies
-from . import ws    
+
+from . import crud, models, auth, dependencies, schemas, ws
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -66,82 +68,59 @@ location {service.access_path} {{
 def read_root():
     return {"message": "ZTNA PoC Backend is running"}
 
+from fastapi.security import OAuth2PasswordRequestForm
+from datetime import timedelta
+
+from . import crud, models, auth, dependencies, schemas
+
+# ... (existing code) ...
+
 # --- Authentication Endpoints ---
-@app.post("/login")
-async def login_for_session_cookie(response: Response, form_data: Request, db: Session = Depends(dependencies.get_db)):
-    form = await form_data.form()
-    username = form.get("username")
-    password = form.get("password")
-    user = crud.get_user_by_username(db, username=username)
-    if not user or not auth.verify_password(password, user.hashed_password):
+@app.post("/api/users/login", response_model=schemas.Token)
+async def login_for_access_token(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(dependencies.get_db)):
+    user = crud.get_user_by_username(db, username=form_data.username)
+    if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    auth.create_session_cookie(response, username, key="session_id")
-    return {"message": "Login successful"}
+    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth.create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    auth.set_access_token_cookie(response, access_token)
+    return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/admin/login")
-async def admin_login_for_session_cookie(response: Response, form_data: Request, db: Session = Depends(dependencies.get_db)):
-    form = await form_data.form()
-    username = form.get("username")
-    password = form.get("password")
-    admin = crud.get_admin_by_username(db, username=username)
-    if not admin or not auth.verify_password(password, admin.hashed_password):
+@app.post("/api/admin/login", response_model=schemas.Token)
+async def admin_login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(dependencies.get_db)):
+    admin = crud.get_admin_by_username(db, username=form_data.username)
+    if not admin or not auth.verify_password(form_data.password, admin.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect admin username or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    auth.create_session_cookie(response, username, key="admin_session_id")
-    return {"message": "Admin login successful"}
+    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth.create_access_token(
+        data={"sub": admin.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/logout")
-def logout(response: Response):
-    auth.delete_session_cookie(response, key="session_id")
-    auth.delete_session_cookie(response, key="admin_session_id")
-    return {"message": "Logout successful"}
+@app.get("/api/users/me", response_model=schemas.User)
+async def read_users_me(current_user: schemas.User = Depends(dependencies.get_current_user)):
+    return current_user
+
+@app.get("/api/admin/me", response_model=schemas.AdminUser)
+async def read_admins_me(current_admin: schemas.AdminUser = Depends(dependencies.get_current_admin)):
+    return current_admin
 
 # --- ZTNA Core Auth Check Endpoint ---
-@app.get("/api/check_auth")
-async def check_auth(request: Request, uri: str, db: Session = Depends(dependencies.get_db)):
-    username = request.cookies.get("session_id")
-    print(f"DEBUG: check_auth received for URI: '{uri}'")
-
-    if not username:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie")
-
-    # 1. Get required score for the requested service
-    service = crud.get_service_by_access_path(db, access_path=uri)
-    if not service:
-        # Return 403 to avoid surfacing 404 as 500 via auth_request
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Service for path {uri} not found")
-    
-    required_score = service.required_score
-
-    # 2. Get user's current score from UEM
-    try:
-        async with httpx.AsyncClient() as client:
-            res = await client.get(f"{UEM_URL}/score/{username}")
-            res.raise_for_status()
-            user_score = res.json().get("score", 0)
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"UEM service unavailable: {e}")
-
-    # 3. Compare scores and authorize
-    if user_score >= required_score:
-        return Response(status_code=status.HTTP_200_OK)
-    else:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient security score")
-
-# Path-style variant to avoid query-string encoding issues
 @app.get("/api/check_auth/{full_path:path}")
-async def check_auth_by_path(request: Request, full_path: str, db: Session = Depends(dependencies.get_db)):
+async def check_auth_by_path(full_path: str, current_user: schemas.User = Depends(dependencies.get_current_user), db: Session = Depends(dependencies.get_db)):
     uri = "/" + full_path.lstrip("/")
-    username = request.cookies.get("session_id")
-    print(f"DEBUG: check_auth (by_path) received for URI: '{uri}'")
-
-    if not username:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie")
+    username = current_user.username
+    print(f"DEBUG: check_auth (by_path) received for URI: '{uri}' for user: '{username}'")
 
     service = crud.get_service_by_access_path(db, access_path=uri)
     if not service:
@@ -165,18 +144,18 @@ async def check_auth_by_path(request: Request, full_path: str, db: Session = Dep
 # --- Admin CRUD APIs ---
 
 # Users
-@app.get("/admin/users", response_model=List[models.UserInDB])
+@app.get("/api/admin/users", response_model=List[models.UserInDB])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     return crud.get_users(db, skip=skip, limit=limit)
 
-@app.post("/admin/users", response_model=models.UserInDB)
+@app.post("/api/admin/users", response_model=models.UserInDB)
 def create_user(user: models.UserCreate, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     return crud.create_user(db=db, user=user)
 
-@app.delete("/admin/users/{user_id}", response_model=models.UserInDB)
+@app.delete("/api/admin/users/{user_id}", response_model=models.UserInDB)
 def delete_user(user_id: int, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     db_user = crud.delete_user(db, user_id=user_id)
     if db_user is None:
@@ -184,18 +163,18 @@ def delete_user(user_id: int, db: Session = Depends(dependencies.get_db), admin:
     return db_user
 
 # Admins
-@app.get("/admin/admins", response_model=List[models.AdminInDB])
+@app.get("/api/admin/admins", response_model=List[models.AdminInDB])
 def read_admins(skip: int = 0, limit: int = 100, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     return crud.get_admins(db, skip=skip, limit=limit)
 
-@app.post("/admin/admins", response_model=models.AdminInDB)
+@app.post("/api/admin/admins", response_model=models.AdminInDB)
 def create_admin(admin_user: models.AdminCreate, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     db_admin = crud.get_admin_by_username(db, username=admin_user.username)
     if db_admin:
         raise HTTPException(status_code=400, detail="Admin username already registered")
     return crud.create_admin(db=db, admin=admin_user)
 
-@app.delete("/admin/admins/{admin_id}", response_model=models.AdminInDB)
+@app.delete("/api/admin/admins/{admin_id}", response_model=models.AdminInDB)
 def delete_admin(admin_id: int, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     db_admin = crud.delete_admin(db, admin_id=admin_id)
     if db_admin is None:
@@ -207,11 +186,11 @@ def delete_admin(admin_id: int, db: Session = Depends(dependencies.get_db), admi
 def read_services_public(skip: int = 0, limit: int = 100, db: Session = Depends(dependencies.get_db)):
     return crud.get_services(db, skip=skip, limit=limit)
 
-@app.get("/admin/services", response_model=List[models.ServiceInDB])
+@app.get("/api/admin/services", response_model=List[models.ServiceInDB])
 def read_services_admin(skip: int = 0, limit: int = 100, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     return crud.get_services(db, skip=skip, limit=limit)
 
-@app.post("/admin/services", response_model=models.ServiceInDB)
+@app.post("/api/admin/services", response_model=models.ServiceInDB)
 def create_service(service: models.ServiceCreate, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     db_service = crud.create_service(db=db, service=service)
     config = generate_nginx_config(db_service)
@@ -221,7 +200,7 @@ def create_service(service: models.ServiceCreate, db: Session = Depends(dependen
     reload_nginx()
     return db_service
 
-@app.delete("/admin/services/{service_id}", response_model=models.ServiceInDB)
+@app.delete("/api/admin/services/{service_id}", response_model=models.ServiceInDB)
 def delete_service(service_id: int, db: Session = Depends(dependencies.get_db), admin: models.AdminInDB = Depends(dependencies.get_current_admin)):
     db_service = crud.get_service(db, service_id=service_id)
     if db_service is None:

@@ -40,19 +40,31 @@
             const formData = new FormData(form);
             const errorMessage = document.getElementById('error-message');
 
+            // Convert FormData to URLSearchParams for x-www-form-urlencoded
+            const body = new URLSearchParams();
+            for (const pair of formData.entries()) {
+                body.append(pair[0], pair[1]);
+            }
+
             try {
-                const response = await fetch('/login', {
+                const response = await fetch('/api/users/login', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: body
                 });
 
                 if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('accessToken', data.access_token);
                     window.location.href = '/user_dashboard.html';
                 } else {
                     const error = await response.json();
                     errorMessage.textContent = error.detail || 'Login failed';
                 }
             } catch (error) {
+                console.error('Login error:', error);
                 errorMessage.textContent = 'An error occurred. Please try again.';
             }
         });

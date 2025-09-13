@@ -1,12 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 2rem; }
-        .container { max-width: 1200px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+        .navbar { background-color: #343a40; padding: 1rem 2rem; color: white; display: flex; justify-content: space-between; align-items: center; }
+        .navbar a { color: white; text-decoration: none; }
+        .navbar #username { font-weight: bold; }
+        .navbar button { background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; }
+        .container { max-width: 1200px; margin: 2rem auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         h1, h2 { border-bottom: 1px solid #dee2e6; padding-bottom: 1rem; margin-top: 2rem; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }
         .card { border: 1px solid #dee2e6; border-radius: 4px; padding: 1.5rem; }
@@ -22,9 +20,15 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Admin Dashboard</h1>
+    <div class="navbar">
+        <a href="#"><h1>Admin Dashboard</h1></a>
+        <div>
+            <span id="username"></span>
+            <button id="logout-button">Logout</button>
+        </div>
+    </div>
 
+    <div class="container">
         <!-- Services Section -->
         <section id="services">
             <h2>Services</h2>
@@ -110,19 +114,50 @@
     </div>
 
     <script>
-        const API_BASE = '/admin';
+        const token = localStorage.getItem('adminAccessToken');
+        const API_BASE = '/api/admin';
 
-        // Generic function to fetch and render lists
+        // --- Auth-related functions ---
+        function redirectToLogin() {
+            localStorage.removeItem('adminAccessToken');
+            window.location.href = '/admin_login.html';
+        }
+
+        async function fetchWithAuth(url, options = {}) {
+            const headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${token}`
+            };
+            const response = await fetch(url, { ...options, headers, cache: 'no-cache' });
+
+            if (response.status === 401 || response.status === 403) {
+                redirectToLogin();
+                throw new Error('Unauthorized');
+            }
+            return response;
+        }
+
+        async function loadAdminInfo() {
+            const usernameSpan = document.getElementById('username');
+            try {
+                const response = await fetchWithAuth('/api/admin/me');
+                if (!response.ok) throw new Error('Failed to load admin info');
+                const admin = await response.json();
+                usernameSpan.textContent = `Welcome, ${admin.username} (Admin)`;
+            } catch (error) {
+                console.error("Error loading admin info:", error);
+                usernameSpan.textContent = 'Could not load admin data.';
+            }
+        }
+
+        // --- Generic API functions ---
         async function renderList(endpoint, listId, itemRenderer) {
             const listElement = document.getElementById(listId);
             try {
-                const response = await fetch(`${API_BASE}/${endpoint}`, { cache: 'no-cache' });
-                if (!response.ok) {
-                    if(response.status === 401) window.location.href = '/admin_login.html';
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                const response = await fetchWithAuth(`${API_BASE}/${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const items = await response.json();
-                listElement.innerHTML = ''; // Clear list
+                listElement.innerHTML = '';
                 if (items.length === 0) listElement.innerHTML = '<li>None found.</li>';
                 items.forEach(item => listElement.appendChild(itemRenderer(item)));
             } catch (e) {
@@ -130,19 +165,17 @@
             }
         }
 
-        // Generic function to handle item deletion
         async function deleteItem(endpoint, id, callback) {
             if (!confirm('Are you sure you want to delete this item?')) return;
             try {
-                const response = await fetch(`${API_BASE}/${endpoint}/${id}`, { method: 'DELETE' });
+                const response = await fetchWithAuth(`${API_BASE}/${endpoint}/${id}`, { method: 'DELETE' });
                 if (!response.ok) throw new Error('Failed to delete');
-                callback(); // Refresh the list
+                callback();
             } catch (e) {
                 alert(`Error: ${e.message}`);
             }
         }
 
-        // Generic function to handle item creation
         async function createItem(endpoint, formId, callback) {
             const form = document.getElementById(formId);
             form.addEventListener('submit', async (e) => {
@@ -150,11 +183,10 @@
                 const formData = new FormData(form);
                 const data = Object.fromEntries(formData.entries());
                 
-                // Convert score to number if it exists
                 if(data.required_score) data.required_score = parseInt(data.required_score, 10);
 
                 try {
-                    const response = await fetch(`${API_BASE}/${endpoint}`, {
+                    const response = await fetchWithAuth(`${API_BASE}/${endpoint}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
@@ -164,7 +196,7 @@
                         throw new Error(err.detail || 'Failed to create item');
                     }
                     form.reset();
-                    callback(); // Refresh list
+                    callback();
                 } catch (e) {
                     alert(`Error: ${e.message}`);
                 }
@@ -200,12 +232,18 @@
             renderList('services', 'service-list', createServiceListItem);
         }
 
-        window.onload = () => {
+        document.getElementById('logout-button').addEventListener('click', redirectToLogin);
+
+        // --- Initial Load ---
+        if (!token) {
+            redirectToLogin();
+        } else {
+            loadAdminInfo();
             loadAllData();
             createItem('users', 'add-user-form', loadAllData);
             createItem('admins', 'add-admin-form', loadAllData);
             createItem('services', 'add-service-form', loadAllData);
-        };
+        }
     </script>
 </body>
 </html>

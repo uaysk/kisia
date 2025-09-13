@@ -8,3 +8,6 @@ PyMySQL
 httpx
 docker
 python-multipart # For form data
+
+python-jose[cryptography]
+passlib[bcrypt]
