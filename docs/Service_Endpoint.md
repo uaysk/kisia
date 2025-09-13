@@ -25,7 +25,7 @@
 - WS /ws/client — 클라이언트 ↔ 서버프록시
 - WS /ws/uem — UEM ↔ 서버프록시
 
-### Dummy UEM (FastAPI)
+### Dummy UEM (FastAPI), 실제 UEM 서버 구현 후 삭제
 
 - GET /score/{username} — 사용자 신뢰 점수 조회
 
@@ -33,9 +33,6 @@
 
 - INTERNAL /api/check_auth 접두 — 내부 서브요청용(외부 접근 불가), 백엔드로 프록시
 - PROXY /api/ 접두 — 백엔드 API 프록시 (backend:8000/api/)
-- 보호 대상 프록시(샘플)
-    - /test — auth_request /api/check_auth/test 후 proxy_pass http://172.30.1.1:91
-    - /whoami — auth_request /api/check_auth/whoami 후 proxy_pass http://172.30.1.1:90
 - 정적 페이지
     - / (기본 user_login.html)
     - /user_login.html, /user_dashboard.html, /admin_login.html, /admin_dashboard.html
