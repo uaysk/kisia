@@ -21,3 +21,5 @@ launchSettings.json
 .env
 venv
 .venv
+
+nginx/conf.d/
