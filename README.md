@@ -88,6 +88,9 @@
 
 # 프로젝트 구조도
 
+<img width="2630" height="2424" alt="프로젝트 구조도" src="https://github.com/user-attachments/assets/c75ffb88-9123-4259-a5c1-a7b321cffb4f" />
+
+
 [사용자: 홍길동]
         │
         ▼
