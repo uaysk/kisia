@@ -68,8 +68,10 @@ services:
     environment:
       LOG_PATH: /var/log/nginx/access.log
       LISTEN_PORT: "9113"
+      GEOIP_DB_PATH: /etc/geoip/GeoLite2-City.mmdb
     volumes:
       - ./nginx/log:/var/log/nginx:ro
+      - ./monitoring/geoip:/etc/geoip:ro
     depends_on:
       - nginx
     networks:
@@ -119,4 +121,3 @@ volumes:
 networks:
   ztna-net:
     driver: bridge
-

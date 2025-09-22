@@ -20,6 +20,152 @@
   },
   "panels": [
     {
+      "id": 5,
+      "type": "geomap",
+      "title": "Request Geo Distribution",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (country, city, latitude, longitude) (increase(nginx_http_request_location_total[5m]))",
+          "format": "table",
+          "instant": false,
+          "legendFormat": "{{country}} / {{city}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (country, city, latitude, longitude) (increase(nginx_http_forbidden_location_total[5m]))",
+          "format": "table",
+          "instant": false,
+          "legendFormat": "403: {{country}} / {{city}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "latitude",
+                "destinationType": "number"
+              },
+              {
+                "targetField": "longitude",
+                "destinationType": "number"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latitude"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decdeg"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "longitude"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decdeg"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "basemap": {
+          "type": "carto",
+          "name": "CartoDB Voyager"
+        },
+        "controls": {
+          "showZoom": true,
+          "showAttribution": true,
+          "showMeasure": false,
+          "showDebug": false
+        },
+        "view": {
+          "id": "world",
+          "lat": 20,
+          "lon": 0,
+          "zoom": 1.2
+        },
+        "layers": [
+          {
+            "type": "symbols",
+            "name": "All Requests",
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "queryRefId": "A",
+            "size": {
+              "mode": "byValue",
+              "field": "Value",
+              "min": 2,
+              "max": 18
+            },
+            "color": {
+              "mode": "continuous",
+              "field": "Value",
+              "scheme": "Turbo"
+            }
+          },
+          {
+            "type": "symbols",
+            "name": "403 Forbidden",
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "queryRefId": "B",
+            "size": {
+              "mode": "byValue",
+              "field": "Value",
+              "min": 3,
+              "max": 22
+            },
+            "color": {
+              "mode": "fixed",
+              "fixedColor": "red"
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": 1,
       "type": "table",
       "title": "Client Requests by IP",
@@ -31,7 +177,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 9
       },
       "options": {
         "frameIndex": 0,
@@ -74,7 +220,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 9
       },
       "options": {
         "frameIndex": 0,
@@ -112,7 +258,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 17
       },
       "fieldConfig": {
         "defaults": {
@@ -148,7 +294,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 17
       },
       "fieldConfig": {
         "defaults": {

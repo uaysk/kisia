@@ -1,1 +1,2 @@
 prometheus-client==0.20.0
+geoip2==4.8.0
