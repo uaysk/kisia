@@ -33,8 +33,8 @@ services:
     build: ./backend
     container_name: ztna-poc-backend-1
     volumes:
-      - ./nginx/conf.d:/nginx_conf_d # Nginx 설정 파일을 생성/삭제하기 위한 볼륨
-      - /var/run/docker.sock:/var/run/docker.sock # Nginx reload를 위한 Docker 소켓 마운트
+      - ./nginx/conf.d:/nginx_conf_d
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DATABASE_URL: "mysql+pymysql://ztna_user:ztnapassword@db:3306/ztna_db"
       UEM_URL: "http://dummy-uem:8000"
@@ -56,14 +56,67 @@ services:
     volumes:
       - ./frontend:/usr/share/nginx/html
       - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/log:/var/log/nginx
     depends_on:
       - backend
     networks:
       - ztna-net
 
+  nginx-exporter:
+    build: ./monitoring/nginx-exporter
+    container_name: ztna-poc-nginx-exporter-1
+    environment:
+      LOG_PATH: /var/log/nginx/access.log
+      LISTEN_PORT: "9113"
+    volumes:
+      - ./nginx/log:/var/log/nginx:ro
+    depends_on:
+      - nginx
+    networks:
+      - ztna-net
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ztna-poc-prometheus-1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - nginx-exporter
+    networks:
+      - ztna-net
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: ztna-poc-grafana-1
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/nginx-monitoring.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - ztna-net
+
 volumes:
   db_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   ztna-net:
     driver: bridge
+
