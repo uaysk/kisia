@@ -1,6 +1,10 @@
 # 프로젝트명
 경량화된 UEM 기반 제로 트러스트 신뢰도 점수 산정 모델 및 접근 제어 구현
 
+# 프로젝트 구조도
+
+<img width="2630" height="2424" alt="프로젝트 구조도" src="https://github.com/user-attachments/assets/c75ffb88-9123-4259-a5c1-a7b321cffb4f" />
+
 # **프로젝트 개요**
 
 여러 가지 사용자 기반의 정보들을 이용하여 신뢰도 점수를 산정하는 모델을 만들고 점수에 따른 사용자 접근 허용 또는 거부 시스템 / 전체 소켓통신, 미들웨어 접근 제어에 대한 시각화 및 대시보드 구현
@@ -1016,8 +1020,3 @@ Session Info → user_agent_fingerprint, previous_success_login_ts
 - **접근 리소스**: CRM(보통 민감)
 - **예상 신뢰도**: **65–72 / 100** → **조건부 허용**
 - **PDP/PEP**: 즉시 Step-Up MFA, 민감 리소스 제한(읽기 전용), 세션 TTL 단축
-
-
-# 프로젝트 구조도
-
-<img width="2630" height="2424" alt="프로젝트 구조도" src="https://github.com/user-attachments/assets/c75ffb88-9123-4259-a5c1-a7b321cffb4f" />
