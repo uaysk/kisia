@@ -86,6 +86,8 @@ elif GEOIP_DB_PATH:
     logging.warning("geoip2 package unavailable; GeoIP lookups disabled")
 
 
+
+
 def tail_log(path: str) -> Iterator[str]:
     """Yield lines appended to *path*, waiting for the file to appear."""
     last_inode = None
@@ -99,7 +101,7 @@ def tail_log(path: str) -> Iterator[str]:
                 if stat_info.st_ino == last_inode and position:
                     log_file.seek(position)
                 else:
-                    log_file.seek(0, os.SEEK_END)
+                    log_file.seek(0)
 
                 last_inode = stat_info.st_ino
 
@@ -170,6 +172,8 @@ def lookup_location(remote_addr: str) -> Optional[Dict[str, str]]:
 
     GEO_CACHE[remote_addr] = location
     return location
+
+
 
 
 def record_location(counter: Counter, remote_addr: str, location: Optional[Dict[str, str]]) -> None:
