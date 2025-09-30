@@ -18,14 +18,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-      - 3307:3306
 
   dummy-uem:
     build: ./dummy-uem
     container_name: ztna-poc-dummy-uem-1
-    ports:
-      - "8000:8000"
     networks:
       - ztna-net
 
@@ -52,7 +48,7 @@ services:
     build: ./nginx
     container_name: ztna-poc-nginx-1
     ports:
-      - "83:80"
+      - "80:80"
     volumes:
       - ./frontend:/usr/share/nginx/html
       - ./nginx/conf.d:/etc/nginx/conf.d
@@ -98,7 +94,7 @@ services:
     image: grafana/grafana:11.1.0
     container_name: ztna-poc-grafana-1
     ports:
-      - "3001:3000"
+      - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin123
