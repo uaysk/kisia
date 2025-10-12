@@ -8,6 +8,8 @@ from sklearn.utils import shuffle
 import re, ipaddress
 from typing import Tuple, Optional
 from sklearn.model_selection import train_test_split
+import joblib
+from sklearn.model_selection import GridSearchCV
 
 from google.colab import drive
 drive.mount('/content/gdrive')
@@ -16,47 +18,110 @@ colab_path = "/content/gdrive/MyDrive/KISIA_ZT/Data/"
 df_normal = pd.read_csv(colab_path + 'train_normal.csv')
 df_anormalous = pd.read_csv(colab_path+ 'val_anomalous.csv')
 
-RULES = { #수정필요
+RULES= {
     "features": {
-        # Identity
-        "mfa_result": {
-            "type": "categorical_map",
-            "map": {"success": 100, "used_but_fail": 20, "fail": 20, "none": 0}
+        "mfa_used": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "failed_attempts_recent": {"type": "bin", "bins": [0, 1, 3, 5, 10**9], "scores": [0, 0, 0, 0]},
+        "days_since_prev_success": {"type": "bin", "bins": [0, 1, 7, 30, 10**9], "scores": [0, 0, 0, 0]},
+        "auth_context_MFA": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "auth_context_비밀번호만": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "patch_age_days": {"type": "bin", "bins": [0, 30, 90, 180, 10**9], "scores": [0, 0, 0, 0]},
+        "disk_encrypt": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "os_version_major": {"type": "bin", "bins": [0, 6, 7, 10**9], "scores": [0, 0, 0]},
+        "software_info_EDR/MDM 정책 준수": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "software_info_컨테이너/앱 격리": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "device_owner_company": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "device_owner_personal": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "impossible_travel": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "vpn_signal": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "network_context_VPN": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "network_context_가정/모바일망": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "network_context_공용망": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "geo_is_allowed": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "net_trust_level": {
+            "type": "ordinal_inv",
+            "mapping": { -1: 0, 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 }
         },
-        # Device
-        "patch_age_days": { "type": "bin", "bins": [0, 30, 90, 180, 10**9], "scores": [100, 70, 40, 0] },
-        "disk_encrypt":   { "type": "boolean", "true_score": 100, "false_score": 0 },
-        "virtual_machine":{ "type": "boolean", "true_score": 60,  "false_score": 100 },
-        "os_tamper_flag": { "type": "boolean", "true_score": 0,   "false_score": 100 },
-        # Network & Geo
-        "network_type": {
-            "type": "categorical_map",
-            "map": {"company": 100, "home": 60, "public": 30, "hotel": 30, "cafe": 30, "mobile": 60}
+
+        "tz_offset_minutes": {"type": "band_zero", "good": 0, "bad": 0},
+        "login_hour_local": {"type": "workhour_band", "start": 9, "end": 18, "tolerance": 2, "in_score": 0, "out_score": 0},
+        "time_info_근무시간": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "time_info_야간": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "behavior_context_대량 전송": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "behavior_context_일반 조회/업로드": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "access_action_download": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_action_upload": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_action_read": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "access_resource_sensitivity_ord": {
+            "type": "ordinal_inv",
+            "mapping": { -1: 0, 0: 0, 1: 0, 2: 0 }
         },
-        "proxy_vpn_tor":  { "type": "categorical_map", "map": {"none": 100, "vpn": 70, "proxy": 20, "suspicious": 20, "tor": 0} },
-        "ip_rep":         { "type": "categorical_map", "map": {"safe": 100, "neutral": 50, "bad": 0} },
-        "geo_country":    { "type": "categorical_map", "map": {"KR":100,"US":100,"JP":100,"DE":100,"GB":100,"RU":0,"KP":0,"IR":0} },
-        "impossible_travel": { "type": "boolean", "true_score": 0, "false_score": 100 },
-        # Environment
-        "device_owner":   { "type": "categorical_map", "map": {"company": 100, "personal": 60} },
-        "tz_offset_minutes": { "type": "band_zero", "zero_is_good": True, "good": 100, "bad": 80 },
-        "locale_lang":    { "type": "passthrough_const", "value": 100 },
-        # Behavioral / Session
-        "login_hour_local": { "type": "workhour_band", "start": 9, "end": 18, "tolerance": 2, "in_score": 100, "out_score": 50 },
-        "failed_attempts_recent": { "type": "bin", "bins": [0,1,4,11,10**9], "scores": [100,80,40,0] },
-        "previous_success_login_ts": { "type": "passthrough_const", "value": 100 },
-        "user_agent_fingerprint":    { "type": "passthrough_const", "value": 100 },
+
+        "access_resource_name_crm": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_resource_name_doc_repo": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_resource_name_hr_db": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_resource_name_internal_intra_db": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_resource_name_intra": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_resource_name_mail": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "access_resource_name_project_repo": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "user_role_employee": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "user_role_guest": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "user_info_정규직": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "user_info_외부 게스트": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "locale_lang_ko-KR": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "locale_lang_en-US": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "locale_lang_ja-JP": {"type": "boolean", "true_score": 0, "false_score": 0},
+
+        "location_info_국내": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "location_info_해외 허용국": {"type": "boolean", "true_score": 0, "false_score": 0},
+        "location_info_해외 금지국": {"type": "boolean", "true_score": 0, "false_score": 0},
     },
+
     "groups": {
-        "identity":    ["mfa_result"],
-        "device":      ["patch_age_days","disk_encrypt","virtual_machine","os_tamper_flag"],
-        "network":     ["network_type","proxy_vpn_tor","ip_rep","geo_country","impossible_travel"],
-        "environment": ["device_owner","tz_offset_minutes","locale_lang"],
-        "behavioral":  ["login_hour_local","failed_attempts_recent"],
-        "session":     ["previous_success_login_ts","user_agent_fingerprint"]
+        "identity": [
+            "mfa_used", "failed_attempts_recent", "days_since_prev_success",
+            "auth_context_MFA", "auth_context_비밀번호만",
+            "user_info_정규직", "user_info_외부 게스트",
+            "user_role_employee", "user_role_guest"
+        ],
+        "device": [
+            "patch_age_days", "disk_encrypt", "os_version_major",
+            "software_info_EDR/MDM 정책 준수", "software_info_컨테이너/앱 격리",
+            "device_owner_company", "device_owner_personal"
+        ],
+        "network": [
+            "impossible_travel", "vpn_signal", "network_context_VPN",
+            "network_context_가정/모바일망", "network_context_공용망",
+            "geo_is_allowed", "net_trust_level"
+        ],
+        "time_env": [
+            "tz_offset_minutes", "login_hour_local",
+            "time_info_근무시간", "time_info_야간"
+        ],
+        "behavior": [
+            "behavior_context_대량 전송", "behavior_context_일반 조회/업로드",
+            "access_action_download", "access_action_upload", "access_action_read",
+            "access_resource_sensitivity_ord",
+            "access_resource_name_crm", "access_resource_name_doc_repo",
+            "access_resource_name_hr_db", "access_resource_name_internal_intra_db",
+            "access_resource_name_intra", "access_resource_name_mail",
+            "access_resource_name_project_repo"
+        ],
+        "locale_location": [
+            "locale_lang_ko-KR", "locale_lang_en-US", "locale_lang_ja-JP",
+            "location_info_국내", "location_info_해외 허용국", "location_info_해외 금지국"
+        ],
     },
-    # 가중치(합=100)
-    "weights": {"identity":20,"device":30,"network":20,"behavioral":15,"session":10,"environment":5}
+
+    "weights": { "identity": 20, "device": 20, "network": 20, "time_env": 15, "behavior": 15, "locale_location": 10 }
 }
 
 df_normal["label"]=0
@@ -76,7 +141,7 @@ def preprocess_df(
     out = df.copy()
 
     # 1) 드롭
-    for c in ["os_name", "user_id", "device_id", "user_agent_fingerprint", "trust_score", "src_ip", "pdp_pep_decision"]:
+    for c in ["department","job_title","os_name", "user_id", "device_id", "user_agent_fingerprint", "trust_score", "src_ip", "pdp_pep_decision"]:
         if c in out.columns:
             out.drop(columns=c, inplace=True)
 
@@ -129,9 +194,13 @@ def preprocess_df(
       out[new_cols] = out[new_cols].astype("int8")
 
 
+    # 5) proxy_vpn_tor → vpn이면 1, 아니면 0 (bool 처리)
+    if "proxy_vpn_tor" in out.columns:
+        out["vpn_signal"] = (
+            out["proxy_vpn_tor"].astype(str).str.lower().eq("vpn").astype("int8")
+        )
+        out.drop(columns=["proxy_vpn_tor"], inplace=True)
 
-    # 5) 'vpn'이면 1, 그 외 0
-    out["vpn_signal"] = out["proxy_vpn_tor"].astype(str).str.lower().eq("vpn").astype("int8")
 
     # 6) access_resource_sensitivity → low = 0, medium = 1, high = 2
     if "access_resource_sensitivity" in out.columns:
@@ -150,18 +219,29 @@ def preprocess_df(
     allowed = {"KR", "US"}  #허용국가
     out["geo_is_allowed"] = out["geo_country"].isin(allowed).astype("int8")
     out.drop(columns=["geo_country"], inplace=True)
-    # 9) 기타
-    # "network_type" 공공망/사내망
-    # "department" 부서별 점수?
-    # "job_title" 직급 별 신뢰도
+    # 9) netowrk_type 내부망:0 / vpn:1/ home_wifi:2 / mobile_hotspot :3/ public)wifi :4 (숫자가 낮으면 안전)
+    if "network_type" in out.columns:
+      trust_map = {
+          "office_lan": 0,
+         "vpn": 1,
+         "home_wifi": 2,
+         "mobile_hotspot": 3,
+         "public_wifi": 4
+      }
+      nt = out["network_type"].astype(str).str.lower().str.strip()
+
+      out["net_trust_level"] = (
+          nt.map(trust_map)
+            .fillna(2)
+            .astype("int8")
+      )
+      out.drop(columns=["network_type"], inplace=True)
 
 
     return out
 
 df_train_processed = preprocess_df(df_train)
-df_train_processed = df_train_processed.drop(columns=["network_type","proxy_vpn_tor","job_title","department"])
 df_test_processed = preprocess_df(df_test)
-df_test_processed = df_test_processed.drop(columns=["network_type","proxy_vpn_tor","job_title","department"])
 
 X_train = df_train_processed.drop(columns=["label"])
 y_train = df_train_processed["label"]
@@ -172,10 +252,10 @@ y_test = df_test_processed["label"]
 
 model = XGBClassifier(
     n_estimators=300,
-    learning_rate=0.1,
-    max_depth=6,
-    subsample=0.8,
-    colsample_bytree=0.8,
+    learning_rate=0.05,
+    max_depth=3,
+    subsample=0.6,
+    colsample_bytree=0.6,
     random_state=42,
     n_jobs=-1
 )
@@ -189,3 +269,88 @@ print("\nConfusion Matrix:")
 print(confusion_matrix(y_test, y_pred))
 print("\nClassification:")
 print(classification_report(y_test, y_pred))
+
+importances = model.feature_importances_
+feature_names = X_train.columns
+importance_df = pd.DataFrame({
+    "Feature": feature_names,
+    "Importance": importances
+}).sort_values(by="Importance", ascending=False)
+
+print(importance_df.head(15))
+
+def _score_feature_value(val, rule, neutral=0):
+    t = rule.get("type")
+    if pd.isna(val):
+        return neutral
+
+    if t == "boolean_score":
+        true_s  = rule.get("true_score", neutral)
+        false_s = rule.get("false_score", neutral)
+        return true_s if int(val) == 1 else false_s
+
+    if t == "bin_score":
+        bins   = rule.get("bins", [])
+        scores = rule.get("scores", [])
+        for i in range(len(bins) - 1):
+            if bins[i] <= float(val) < bins[i + 1]:
+                return scores[i]
+        return scores[-1] if scores else neutral
+
+    if t == "is_normal_score":
+        return rule.get("good", neutral) if abs(int(val)) == 0 else rule.get("bad", neutral)
+
+    if t == "workhour_score":
+        start     = int(rule.get("start", 9))
+        end       = int(rule.get("end", 18))
+        tol       = int(rule.get("tolerance", 2))
+        in_score  = rule.get("in_score", neutral)
+        out_score = rule.get("out_score", neutral)
+        h = int(val)
+        return in_score if (start - tol) <= h <= (end + tol) else out_score
+
+    if t == "ordinal_score":
+        mp = rule.get("mapping", {})
+        return mp.get(int(val), neutral)
+
+    if t == "categorical_score":
+        mp = rule.get("map", {})
+        return mp.get(val, mp.get(str(val), neutral))
+
+    return neutral
+
+def trust_scores_RULES(df: pd.DataFrame, RULES: dict, neutral=0):
+    feats   = RULES.get("features", {})
+    groups  = RULES.get("groups", {})
+    weights = RULES.get("weights", {})
+
+    df_out = df.copy()
+    df_out["trust_score"] = 0.0
+
+    total_weight = sum(weights.values()) or 1
+
+    for gname, gcols in groups.items():
+        valid_cols = [c for c in gcols if c in df.columns and c in feats]
+        if not valid_cols:
+            continue
+
+        group_mean = pd.Series([0.0] * len(df), index=df.index)
+        for col in valid_cols:
+            rule = feats[col]
+            group_mean += df[col].apply(lambda v: _score_feature_value(v, rule, neutral))
+        group_mean /= len(valid_cols)
+
+        weight = weights.get(gname, 0) / total_weight
+        df_out["trust_score"] += group_mean * weight
+
+    df_out["trust_score"] = df_out["trust_score"].clip(0, 100).round(1)
+    return df_out
+
+artifact = {
+    "model": model,
+    "feature_columns": list(X_train.columns),
+    "created_at": str(pd.Timestamp.utcnow()),
+    "params": model.get_params()
+}
+
+joblib.dump(artifact, "zt_xgb_model.pkl")
