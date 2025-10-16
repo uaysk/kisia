@@ -124,6 +124,134 @@ RULES= {
     "weights": { "identity": 20, "device": 20, "network": 20, "time_env": 15, "behavior": 15, "locale_location": 10 }
 }
 
+def preprocess_df(
+    df: pd.DataFrame,
+    *,
+    event_ts_col: Optional[str] = None,
+    snapshot_ts: Optional[pd.Timestamp] = None,
+) -> Tuple[pd.DataFrame, list, list]:
+    out = df.copy()
+
+    # 1) 드롭
+    for c in ["department","job_title","os_name", "user_id", "device_id", "user_agent_fingerprint", "src_ip", "pdp_pep_decision"]:
+        if c in out.columns:
+            out.drop(columns=c, inplace=True)
+
+    # 2) previous_success_login_ts → days_since_prev_success 로그인 이후 지난 시간으로 변경
+    if "previous_success_login_ts" in out.columns:
+        prev_ts = pd.to_datetime(out["previous_success_login_ts"], utc=True, errors="coerce")
+        if event_ts_col and event_ts_col in out.columns:
+            evt_ts = pd.to_datetime(out[event_ts_col], utc=True, errors="coerce")
+            days = (evt_ts - prev_ts).dt.total_seconds() / 86400.0
+        else:
+            ref = (snapshot_ts.tz_convert("UTC") if isinstance(snapshot_ts, pd.Timestamp)
+                   else (prev_ts.max() if prev_ts.notna().any()
+                         else pd.Timestamp.utcnow().tz_localize("UTC")))
+            days = (ref - prev_ts).dt.total_seconds() / 86400.0
+        out["days_since_prev_success"] = days.astype("float32")
+        out.drop(columns=["previous_success_login_ts"], inplace=True)
+
+    # 3) os_version
+    if "os_version" in out.columns:
+        maj = out["os_version"].astype(str).str.extract(r"^(\d+)").iloc[:, 0]
+        out["os_version_major"] = pd.to_numeric(maj, errors="coerce").fillna(-1).astype("int16")
+        out.drop(columns=["os_version"], inplace=True)
+
+    # 4) _info / _context/user_role/locale_lang/access_action/access_resource_name/device_owner OHE
+    ohe_cols = [c for c in out.columns if c.endswith("_info") or c.endswith("_context")]
+    if ohe_cols:
+        out = pd.get_dummies(out, columns=ohe_cols)
+        new_dummy_cols = [c for c in out.columns if any(c.startswith(base + "_") for base in ohe_cols)]
+        if new_dummy_cols:
+            out[new_dummy_cols] = out[new_dummy_cols].astype("int8")
+    if "user_role" in out.columns:
+      out = pd.get_dummies(out, columns=["user_role"])
+      new_cols = [c for c in out.columns if c.startswith("user_role_")]
+      out[new_cols] = out[new_cols].astype("int8")
+    if "locale_lang" in out.columns:
+      out = pd.get_dummies(out, columns=["locale_lang"])
+      new_cols = [c for c in out.columns if c.startswith("locale_lang_")]
+      out[new_cols] = out[new_cols].astype("int8")
+    if "access_action" in out.columns:
+      out = pd.get_dummies(out, columns=["access_action"])
+      new_cols = [c for c in out.columns if c.startswith("access_action_")]
+      out[new_cols] = out[new_cols].astype("int8")
+    if "access_resource_name" in out.columns:
+      out = pd.get_dummies(out, columns=["access_resource_name"])
+      new_cols = [c for c in out.columns if c.startswith("access_resource_name_")]
+      out[new_cols] = out[new_cols].astype("int8")
+    if "device_owner" in out.columns:
+      out = pd.get_dummies(out, columns=["device_owner"])
+      new_cols = [c for c in out.columns if c.startswith("device_owner_")]
+      out[new_cols] = out[new_cols].astype("int8")
+
+    # 5) proxy_vpn_tor → vpn이면 1, 아니면 0 (bool 처리)
+    if "proxy_vpn_tor" in out.columns:
+        out["vpn_signal"] = (
+            out["proxy_vpn_tor"].astype(str).str.lower().eq("vpn").astype("int8")
+        )
+        out.drop(columns=["proxy_vpn_tor"], inplace=True)
+
+    # 6) access_resource_sensitivity → low = 0, medium = 1, high = 2
+    if "access_resource_sensitivity" in out.columns:
+        sens_map = {"low": 0, "medium": 1,"high":2}
+        out["access_resource_sensitivity_ord"] = (
+            out["access_resource_sensitivity"].astype(str).str.lower()
+              .map(sens_map).fillna(-1).astype("int8")
+        )
+        out.drop(columns=["access_resource_sensitivity"], inplace=True)
+
+    # 7) boolean → 0/1
+    for b in ["mfa_used", "disk_encrypt", "impossible_travel"]:
+        if b in out.columns:
+            out[b] = out[b].astype("Int8").fillna(0).astype("int8")
+    # 8) 허용국 접속=1 / 허용국 X = 0
+    allowed = {"KR", "US"}  #허용국가
+    out["geo_is_allowed"] = out["geo_country"].isin(allowed).astype("int8")
+    out.drop(columns=["geo_country"], inplace=True)
+    # 9) netowrk_type 내부망:0 / vpn:1/ home_wifi:2 / mobile_hotspot :3/ public)wifi :4 (숫자가 낮으면 안전)
+    if "network_type" in out.columns:
+      trust_map = {
+          "office_lan": 0,
+         "vpn": 1,
+         "home_wifi": 2,
+         "mobile_hotspot": 3,
+         "public_wifi": 4
+      }
+      nt = out["network_type"].astype(str).str.lower().str.strip()
+
+      out["net_trust_level"] = (
+          nt.map(trust_map)
+            .fillna(2)
+            .astype("int8")
+      )
+      out.drop(columns=["network_type"], inplace=True)
+
+    if "trust_score" in out.columns:
+      trust_bins = [0, 20, 40, 60, 80, 100]
+      trust_labels = ['매우낮음', '낮음', '보통', '높음', '매우높음']
+
+      out["trust_level_map"] = pd.cut(
+          out["trust_score"],
+          bins=trust_bins,
+          labels=trust_labels,
+          include_lowest=True
+      )
+
+      trust_level_map_dict = {
+          '매우낮음': 0,
+          '낮음': 1,
+          '보통': 2,
+          '높음': 3,
+          '매우높음': 4
+      }
+      out["trust_level_map_num"] = out["trust_level_map"].map(trust_level_map_dict).astype("int8")
+
+      if "trust_level" in out.columns:
+          out.drop(columns=["trust_level"], inplace=True)
+          out.drop(columns=["trust_level_map"], inplace=True)
+    return out
+
 def _score_feature_value(val, rule, neutral=0):
     t = rule.get("type")
     if pd.isna(val):
@@ -202,7 +330,7 @@ print(trust_distribution)
 print(f"\n신뢰도 점수 통계:")
 print(df_data['trust_score'].describe())
 
-def create_balanced_trust_dataset(df, samples_per_bin=None, test_size=0.2, random_state=42):
+def create_balanced_trust_dataset(df, samples_per_bin=None,val_ratio=0.2, test_size=0.2, random_state=42):
 
     if isinstance(df["trust_level"].dtype, CategoricalDtype):
         trust_labels = list(df["trust_level"].cat.categories)
@@ -211,8 +339,7 @@ def create_balanced_trust_dataset(df, samples_per_bin=None, test_size=0.2, rando
 
     print("원본 데이터 구간별 분포:")
     print(df["trust_level"].value_counts().sort_index())
-
-    train_parts, test_parts = [], []
+    train_parts, val_parts, test_parts = [], [], []
 
     for level in trust_labels:
         level_df = df[df["trust_level"] == level]
@@ -225,49 +352,63 @@ def create_balanced_trust_dataset(df, samples_per_bin=None, test_size=0.2, rando
         if target_n < n:
             level_df = level_df.sample(n=target_n, random_state=random_state)
 
-        if len(level_df) < 2:
+        if len(level_df) < 3:
             print(f"'{level}' 구간 데이터 너무 적음 — 전부 train으로 이동 ({len(level_df)}개)")
             train_parts.append(level_df)
             continue
 
-        bin_train, bin_test = train_test_split(
-            level_df, test_size=test_size, random_state=random_state, shuffle=True
+        temp_ratio = val_ratio + test_size
+        bin_train, bin_temp = train_test_split(
+            level_df, test_size=temp_ratio, random_state=random_state, shuffle=True
         )
+
+        if len(bin_temp) >= 2:
+            rel_test = test_size / (val_ratio + test_size)
+            bin_val, bin_test = train_test_split(
+                bin_temp, test_size=rel_test, random_state=random_state, shuffle=True
+            )
+        else:
+            bin_val, bin_test = bin_temp, level_df.iloc[0:0]
+
         train_parts.append(bin_train)
+        val_parts.append(bin_val)
         test_parts.append(bin_test)
 
-        print(f"{level}: Train {len(bin_train)}개, Test {len(bin_test)}개 분할 (사용 {len(level_df)}/{n})")
+        print(f"{level}: Train {len(bin_train)}개 / Val {len(bin_val)}개 / Test {len(bin_test)}개 (사용 {len(level_df)}/{n})")
 
     df_train = shuffle(pd.concat(train_parts, ignore_index=True), random_state=random_state).reset_index(drop=True)
+    df_val   = shuffle(pd.concat(val_parts,   ignore_index=True), random_state=random_state).reset_index(drop=True)
     df_test  = shuffle(pd.concat(test_parts,  ignore_index=True), random_state=random_state).reset_index(drop=True)
 
-    print("\n[Train set 구간별 분포]")
-    print(df_train["trust_level"].value_counts().sort_index())
-    print("\n[Test set 구간별 분포]")
-    print(df_test["trust_level"].value_counts().sort_index())
-    print(f"\nTrain 크기: {len(df_train)}, Test 크기: {len(df_test)}")
+    print("\n[Train set 구간별 분포]"); print(df_train["trust_level"].value_counts().sort_index())
+    print("\n[Val set 구간별 분포]");   print(df_val["trust_level"].value_counts().sort_index())
+    print("\n[Test set 구간별 분포]");  print(df_test["trust_level"].value_counts().sort_index())
+    print(f"\nTrain: {len(df_train)}, Val: {len(df_val)}, Test: {len(df_test)}")
 
-    return df_train, df_test
+    return df_train, df_val, df_test
 
-df_train, df_test = create_balanced_trust_dataset(
-    df_data,
-    samples_per_bin=None,
-    test_size=0.2,
-    random_state=42
+df_train, df_val, df_test = create_balanced_trust_dataset(
+    df_data, samples_per_bin=None, val_ratio=0.2, test_size=0.2, random_state=42
 )
 
 df_train_processed = preprocess_df(df_train)
 df_test_processed = preprocess_df(df_test)
+df_val_processed = preprocess_df(df_val)
 
-X_train = df_train_processed.drop(columns=["trust_level_map_num","trust_score","net_trust_level"])
+drop_cols = [c for c in ["trust_level_map_num","trust_score","net_trust_level"]
+             if c in df_train_processed.columns]
+
+X_train = df_train_processed.drop(columns=drop_cols)
 y_train = df_train_processed["trust_level_map_num"]
 
-X_test = df_test_processed.drop(columns=["trust_level_map_num","trust_score","net_trust_level"])
-y_test = df_test_processed["trust_level_map_num"]
+X_val   = df_val_processed.drop(columns=drop_cols)
+y_val   = df_val_processed["trust_level_map_num"]
 
+X_test  = df_test_processed.drop(columns=drop_cols)
+y_test  = df_test_processed["trust_level_map_num"]
 
 model = XGBClassifier(
-    n_estimators=300,
+    n_estimators=1000,
     learning_rate=0.05,
     max_depth=3,
     subsample=0.6,
@@ -275,20 +416,27 @@ model = XGBClassifier(
     random_state=42,
     n_jobs=-1
 )
+
 model.fit(X_train, y_train)
 
-y_pred = model.predict(X_test)
-print(f"Accuracy        : {accuracy_score(y_test, y_pred):.4f}")
-print(f"F1 (macro)      : {f1_score(y_test, y_pred, average='macro'):.4f}")
-print(f"F1 (weighted)   : {f1_score(y_test, y_pred, average='weighted'):.4f}")
-
 labels = [0,1,2,3,4]
-print("\nConfusion Matrix (labels 0..4):")
+target_names = ['매우낮음(0)','낮음(1)','보통(2)','높음(3)','매우높음(4)']
+
+y_pred = model.predict(X_test)
+
+print("\n=== [Test Set] 성능 ===")
+print(f"Accuracy : {accuracy_score(y_test, y_pred):.4f}")
+print(f"F1 Score  : {f1_score(y_test, y_pred, average='macro'):.4f}")
+
+print("\nConfusion Matrix (Test):")
 print(confusion_matrix(y_test, y_pred, labels=labels))
 
-target_names = ['매우낮음(0)','낮음(1)','보통(2)','높음(3)','매우높음(4)']
-print("\nClassification Report:")
-print(classification_report(y_test, y_pred, labels=labels, target_names=target_names, digits=4))
+print("\nClassification Report (Test):")
+report = classification_report(
+    y_test, y_pred, labels=labels, target_names=target_names, digits=4, output_dict=True
+)
+report_df = pd.DataFrame(report)
+print(report_df)
 
 importances = model.feature_importances_
 feature_names = X_train.columns
