@@ -19,9 +19,11 @@ services:
       timeout: 5s
       retries: 5
 
-  dummy-uem:
-    build: ./dummy-uem
-    container_name: ztna-poc-dummy-uem-1
+  uem-server:
+    build: ./uem-server
+    container_name: ztna-poc-uem-server-1
+    ports:
+      - "8000:8000"
     networks:
       - ztna-net
 
@@ -33,13 +35,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       DATABASE_URL: "mysql+pymysql://ztna_user:ztnapassword@db:3306/ztna_db"
-      UEM_URL: "http://dummy-uem:8000"
+      UEM_URL: "http://uem-server:8000"
       NGINX_CONTAINER_NAME: "ztna-poc-nginx-1"
       NGINX_CONF_PATH: "/nginx_conf_d"
     depends_on:
       db:
         condition: service_healthy
-      dummy-uem:
+      uem-server:
         condition: service_started
     networks:
       - ztna-net

@@ -1,0 +1,29 @@
+{
+  "username": "user_a",
+  "scenario": {
+    "mfa_used": 1,
+    "failed_attempts_recent": 0,
+    "days_since_prev_success": 2,
+    "auth_context_MFA": 1,
+    "patch_age_days": 15,
+    "disk_encrypt": 1,
+    "os_version": "11.6.1",
+    "software_info": "EDR/MDM 정책 준수",
+    "device_owner": "company",
+    "impossible_travel": 0,
+    "network_context": "VPN",
+    "network_type": "vpn",
+    "geo_country": "KR",
+    "tz_offset_minutes": 0,
+    "login_hour_local": 10,
+    "time_info": "근무시간",
+    "behavior_context": "일반 조회/업로드",
+    "access_action": "read",
+    "access_resource_sensitivity": "medium",
+    "access_resource_name": "crm",
+    "user_role": "employee",
+    "user_info": "정규직",
+    "locale_lang": "ko-KR",
+    "location_info": "국내"
+  }
+}
