@@ -14,6 +14,7 @@ x86/
 # Logs
 [Ll]ogs/
 *.log
+__pycache__
 
 # Development settings
 appsettings.Development.json

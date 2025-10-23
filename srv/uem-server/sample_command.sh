@@ -1,0 +1,1 @@
+curl -X POST http://localhost:8000/score -H "Content-Type: application/json" --data-binary @sample_scenario.json
