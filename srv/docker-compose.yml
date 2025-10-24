@@ -22,8 +22,8 @@ services:
   uem-server:
     build: ./uem-server
     container_name: ztna_uem_server
-    ports:
-      - "8000:8000"
+    #ports:
+    #  - "8000:8000" #for debugging
     networks:
       - ztna-net
 
@@ -36,7 +36,7 @@ services:
     environment:
       DATABASE_URL: "mysql+pymysql://ztna_user:ztnapassword@db:3306/ztna_db"
       UEM_URL: "http://uem-server:8000"
-      NGINX_CONTAINER_NAME: "ztna-poc-nginx-1"
+      NGINX_CONTAINER_NAME: "ztna_nginx"
       NGINX_CONF_PATH: "/nginx_conf_d"
     depends_on:
       db:
@@ -50,7 +50,7 @@ services:
     build: ./nginx
     container_name: ztna_nginx
     ports:
-      - "80:80"
+      - "83:80"
     volumes:
       - ./frontend:/usr/share/nginx/html
       - ./nginx/conf.d:/etc/nginx/conf.d

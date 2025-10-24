@@ -382,7 +382,9 @@ def version():
 
 @app.get("/score/{username}")
 def get_user_score(username: str):
-    score = user_scores_store.get(username, DEFAULT_USER_SCORE)
+    if username not in user_scores_store:
+        raise HTTPException(status_code=404, detail="Not Found")
+    score = user_scores_store[username]
     return {"username": username, "score": score}
 
 

@@ -49,15 +49,24 @@ def reload_nginx():
 
 # Helper function to generate Nginx config
 def generate_nginx_config(service: models.ServiceInDB):
+    # Nginx replaces the matched "location" prefix with the path portion of
+    # proxy_pass when the target ends with a trailing slash. Normalise values so
+    # that proxying "/app" resources forwards "/" to the upstream instead of
+    # duplicating the prefix ("/app/index.html" -> "/index.html").
+    access_path = service.access_path if service.access_path.startswith("/") else f"/{service.access_path}"
+    auth_request_path = access_path.rstrip("/") or "/"
+    upstream_base = service.upstream_url.rstrip("/")
+    proxy_pass_target = f"{upstream_base}/"
+
     return f"""
-location {service.access_path} {{
+location {access_path} {{
     # Static auth_request URI using path-style endpoint
-    auth_request /api/check_auth{service.access_path};
+    auth_request /api/check_auth{auth_request_path};
 
     # If auth fails or backend/UEM errors occur, return 403 (not 500)
     error_page 401 403 404 500 502 503 = @error_response;
 
-    proxy_pass {service.upstream_url};
+    proxy_pass {proxy_pass_target};
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
