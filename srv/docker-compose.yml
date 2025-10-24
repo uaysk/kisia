@@ -50,7 +50,7 @@ services:
     build: ./nginx
     container_name: ztna_nginx
     ports:
-      - "83:80"
+      - "80:80"
     volumes:
       - ./frontend:/usr/share/nginx/html
       - ./nginx/conf.d:/etc/nginx/conf.d
