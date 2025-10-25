@@ -25,3 +25,5 @@ venv
 
 srv/nginx/conf.d/
 srv/monitoring/geoip/GeoLite2-City.mmdb
+
+srv/nginx/log
